@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "flowbite";
+
+@layer {
+  .container {
+    @apply max-w-[1272px] w-full px-[16px] mx-auto;
+  }
+  .flex-center {
+    @apply flex items-center;
+  }
+}

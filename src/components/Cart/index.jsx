@@ -1,170 +1,139 @@
-import { useEffect, useState } from "react";
-import { api } from "../../services/api";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { fetchProductsApi, PRODUCTS_CHANGED_EVENT } from "../../services/api";
 
-function Cart() {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const navigate = useNavigate();
+function buildStars(rating) {
+  const full = Math.max(0, Math.min(5, Math.round(rating)));
+  return "★".repeat(full) + "☆".repeat(5 - full);
+}
 
-  // API dan mahsulotlarni olish
-  useEffect(() => {
-    api
-      .get("/products")
-      .then((res) => {
-        setProducts(res.data.products || []);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.log("Mahsulotlarni olishda xatolik:", err);
-        setError("Mahsulotlarni yuklashda xatolik yuz berdi");
-        setLoading(false);
-      });
-  }, []);
-
-  // Mahsulot kartasini yaratish
-  const ProductCard = ({ item }) => {
-    const discountedPrice =
-      item.price - (item.price * (item.discount || 0)) / 100;
-
-    return (
-      <div
-        onClick={() => navigate(`/product/${item._id}`)}
-        className="bg-white rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 cursor-pointer group"
-      >
-        {/* Rasm container */}
-        <div className="bg-gray-100 rounded-lg p-4 overflow-hidden h-48 sm:h-56 lg:h-64 flex items-center justify-center relative">
-          <img
-            src={item.pictures?.[0]}
-            alt={item.name}
-            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-          />
-
-          {/* Diskount badge */}
-          {item.discount > 0 && (
-            <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-              -{item.discount}%
-            </span>
-          )}
-        </div>
-
-        {/* Mahsulot ma'lumoti */}
-        <div className="p-4 sm:p-5">
-          {/* Nomi */}
-          <h3 className="font-semibold text-sm sm:text-base text-gray-900 line-clamp-2 mb-2">
-            {item.name}
-          </h3>
-
-          {/* Reytingi */}
-          <div className="flex items-center gap-1 mb-3">
-            <span className="text-yellow-400 text-sm">⭐⭐⭐⭐☆</span>
-            <span className="text-gray-600 text-xs">4.5/5</span>
-          </div>
-
-          {/* Narx */}
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-lg sm:text-xl text-gray-900">
-              ${discountedPrice.toFixed(0)}
-            </span>
-
-            {item.discount > 0 && (
-              <span className="line-through text-gray-400 text-sm">
-                ${item.price.toFixed(0)}
-              </span>
-            )}
-          </div>
-
-          {/* Tezkor habar */}
-          <p className="text-xs text-gray-500 mt-2">
-            * Batafsil ma'lumotni ko'rish uchun bosing
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  // Yuklanayotgan holatni ko'rsatish
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-16">
-        <div className="flex justify-center items-center min-h-96">
-          <p className="text-lg text-gray-600">Mahsulotlar yuklanmoqda...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Xatolik holati
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-16">
-        <div className="flex justify-center items-center min-h-96">
-          <p className="text-lg text-red-600">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Bo'sh holati
-  if (products.length === 0) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-16">
-        <div className="flex justify-center items-center min-h-96">
-          <p className="text-lg text-gray-600">Mahsulotlar topilmadi</p>
-        </div>
-      </div>
-    );
-  }
+// Bitta mahsulot kartasi
+function ProductCard({ item, onOpen }) {
+  const price = Number(item.price || 0);
+  const discount = Number(item.discount || item.discountPercentage || 0);
+  const finalPrice = price - (price * discount) / 100;
+  const rating = Number(item.rating || 4.5);
 
   return (
-    <div className="w-full bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
-        {/* Sarlavha */}
-        <div className="text-center mb-10 sm:mb-14 lg:mb-16">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-2">
-            YANGI KELGAN MAHSULOTLAR
-          </h1>
-          <p className="text-gray-600 text-sm sm:text-base">
-            Eng so'nggi va eng yaxshi sifatli kiyimlar
-          </p>
-        </div>
-
-        {/* Mahsulotlar gridi - Responsive */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 mb-10 sm:mb-14 lg:mb-16">
-          {products.slice(0, 4).map((item) => (
-            <ProductCard key={item._id} item={item} />
-          ))}
-        </div>
-
-        {/* Barchasi ko'rish tugmasi - Faqat ko'p mahsulot bo'lsa */}
-        {products.length > 8 && (
-          <div className="flex justify-center">
-            <button
-              onClick={() => {
-                // Barchasi ko'rish funksiyasi
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="px-8 sm:px-10 py-3 sm:py-4 border border-gray-300 rounded-full text-gray-900 font-semibold hover:bg-gray-100 transition-colors duration-200"
-            >
-              Barcha mahsulotlarni ko'rish
-            </button>
-          </div>
-        )}
-
-        {/* Boshqa seksiya - Bo'sh joy */}
-        <div className="mt-16 sm:mt-20 pt-10 border-t border-gray-200">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-8 text-center">
-            ENG MASHHUR MAHSULOTLAR
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-            {products.slice(8, 12).map((item) => (
-              <ProductCard key={item._id} item={item} />
-            ))}
-          </div>
-        </div>
+    <button onClick={onOpen} className="text-left group">
+      <div className="bg-[#f1efef] rounded-[20px] p-5 h-[220px] sm:h-[240px] flex items-center justify-center mb-4 overflow-hidden">
+        <img
+          src={item.thumbnail || item.pictures?.[0]}
+          alt={item.name}
+          className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-200"
+        />
       </div>
-    </div>
+
+      <p className="font-semibold text-base sm:text-lg line-clamp-1 mb-1">
+        {item.name || item.title}
+      </p>
+
+      <div className="flex items-center gap-2 text-sm mb-1">
+        <span className="text-[#f5b301]">{buildStars(rating)}</span>
+        <span className="text-gray-500">{rating.toFixed(1)}/5</span>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-bold text-xl">${finalPrice.toFixed(0)}</span>
+        {discount > 0 && (
+          <>
+            <span className="text-gray-400 line-through text-xl">
+              ${price.toFixed(0)}
+            </span>
+            <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded-full">
+              -{discount}%
+            </span>
+          </>
+        )}
+      </div>
+    </button>
+  );
+}
+
+// Bir xil section UI (NEW ARRIVALS / TOP SELLING)
+function ProductSection({ title, items, onOpen }) {
+  return (
+    <>
+      <h2 className="text-center font-black text-4xl sm:text-5xl mb-8 sm:mb-10">
+        {title}
+      </h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        {items.map((item) => (
+          <ProductCard
+            key={item.id}
+            item={item}
+            onOpen={() => onOpen(item.id)}
+          />
+        ))}
+      </div>
+      <div className="flex justify-center mt-8 sm:mt-10">
+        <Link
+          to="/shop/casual"
+          className="inline-flex items-center h-12 px-10 rounded-full border border-gray-300 hover:bg-gray-100 transition-colors"
+        >
+          View All
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function Cart() {
+  const navigate = useNavigate();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Mahsulotlarni backend/local cache'dan olish
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      setProducts(await fetchProductsApi({ fromServer: true }));
+      setError("");
+    } catch (err) {
+      setError(err.response?.data?.message || "Mahsulotlarni yuklab bo'lmadi");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProducts();
+
+    const onRefresh = () => fetchProducts();
+    window.addEventListener("focus", onRefresh);
+    window.addEventListener(PRODUCTS_CHANGED_EVENT, onRefresh);
+    return () => {
+      window.removeEventListener("focus", onRefresh);
+      window.removeEventListener(PRODUCTS_CHANGED_EVENT, onRefresh);
+    };
+  }, [fetchProducts]);
+
+  const sections = useMemo(
+    () => [
+      { title: "NEW ARRIVALS", items: products.slice(0, 4) },
+      { title: "TOP SELLING", items: products.slice(4, 8) },
+    ],
+    [products],
+  );
+
+  if (loading) return <p className="p-8 text-center">Loading...</p>;
+  if (error) return <p className="p-8 text-center text-red-600">{error}</p>;
+
+  return (
+    <section className="container py-12 sm:py-16">
+      <ProductSection
+        title={sections[0].title}
+        items={sections[0].items}
+        onOpen={(id) => navigate(`/product/${id}`)}
+      />
+      <div className="my-10 sm:my-14 border-t border-gray-200" />
+      <ProductSection
+        title={sections[1].title}
+        items={sections[1].items}
+        onOpen={(id) => navigate(`/product/${id}`)}
+      />
+    </section>
   );
 }
 

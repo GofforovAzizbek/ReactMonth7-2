@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 
 // Mobile Navigation transition
 import menuIcon from "../../assets/icons/menu.svg";
@@ -20,11 +21,12 @@ import logo from "../../assets/icons/logo.svg";
 function Header() {
   // Header Navigation map links
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
 
   const navLinks = [
     { name: "Shop", href: "/", hasArrow: true },
-    { name: "On Sale", href: "/", hasArrow: false },
-    { name: "New Arrivals", href: "/", hasArrow: false },
+    { name: "On Sale", href: "/shop/casual", hasArrow: false },
+    { name: "New Arrivals", href: "/shop/casual", hasArrow: false },
     { name: "Brands", href: "/", hasArrow: false },
   ];
 
@@ -39,9 +41,9 @@ function Header() {
               <img src={menuIcon} alt="Menu" />
             </button>
 
-            <a href="/" className="shrink-0">
+            <Link to="/" className="shrink-0">
               <img src={logo} alt="Logo" className="w-[120px] xl:w-[160px]" />
-            </a>
+            </Link>
           </div>
 
           {/* Navigation start */}
@@ -49,13 +51,13 @@ function Header() {
             <ul className="flex items-center gap-[24px]">
               {navLinks.map((link, index) => (
                 <li key={index}>
-                  <a
-                    href={link.href}
+                  <Link
+                    to={link.href}
                     className="flex items-center gap-[4px] hover:text-gray-600 transition-colors"
                   >
                     {link.name}
                     {link.hasArrow && <img src={arrow} alt="" className="" />}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -73,16 +75,20 @@ function Header() {
               />
             </div>
 
-            <div className="flex items-center gap-[12px] xl:gap-[20px]">
+            <div className="flex items-center gap-[12px] xl:gap-[14px]">
               <button className="md:hidden">
                 <img src={searchIcon} alt="search" />
               </button>
-              <a href="/cart">
+              <Link to="/cart">
                 <img src={bagsIcon} alt="cart" />
-              </a>
-              <a href="/profile">
-                <img src={userIcon} alt="user" />
-              </a>
+              </Link>
+              <button
+                onClick={() => navigate("/admin")}
+                className=""
+                title="Admin Panel"
+              >
+                <img src={userIcon} alt="admin" />
+              </button>
             </div>
           </div>
         </div>
@@ -109,13 +115,13 @@ function Header() {
         <ul className="flex flex-col gap-6">
           {navLinks.map((link, index) => (
             <li key={index} onClick={() => setIsOpen(false)}>
-              <a
-                href={link.href}
+              <Link
+                to={link.href}
                 className="text-lg font-medium flex items-center justify-between"
               >
                 {link.name}
                 {link.hasArrow && <img src={arrow} alt="" className="" />}
-              </a>
+              </Link>
             </li>
           ))}
         </ul>

@@ -131,8 +131,8 @@ function Cart() {
         </div>
 
         {/* Mahsulotlar gridi - Responsive */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 mb-10 sm:mb-14 lg:mb-16">
-          {products.slice(0, 8).map((item) => (
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 mb-10 sm:mb-14 lg:mb-16">
+          {products.slice(0, 4).map((item) => (
             <ProductCard key={item._id} item={item} />
           ))}
         </div>

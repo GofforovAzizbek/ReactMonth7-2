@@ -1,7 +1,12 @@
-import { api } from "./axiosConfig";
+import axios from "axios";
 
 // Mahsulotlar o'zgarganda UI'ni qayta yuklash uchun global event
 export const PRODUCTS_CHANGED_EVENT = "products:changed";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://e-commerce-api-v2.nt.azimumarov.uz/api/v1";
+const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT || 10000);
 
 const STORAGE_KEYS = {
   products: "products",
@@ -19,6 +24,80 @@ const IMAGE_UPLOAD_ATTEMPTS = [
 
 function emitProductsChanged() {
   window.dispatchEvent(new Event(PRODUCTS_CHANGED_EVENT));
+}
+
+function getAuthToken() {
+  return (
+    import.meta.env.VITE_API_TOKEN ||
+    localStorage.getItem("authToken") ||
+    localStorage.getItem("apiToken") ||
+    ""
+  );
+}
+
+// API sozlamalari bitta faylda turishi service qatlamini sodda ushlab turadi.
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { "Content-Type": "application/json" },
+  timeout: API_TIMEOUT,
+});
+
+function buildUrl(config = {}) {
+  return `${config.baseURL || ""}${config.url || ""}`;
+}
+
+api.interceptors.request.use(
+  (config) => {
+    const token = getAuthToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+
+    console.info("[API request]", {
+      method: String(config.method || "get").toUpperCase(),
+      url: buildUrl(config),
+      params: config.params || null,
+      data: config.data || null,
+    });
+
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+
+api.interceptors.response.use(
+  (response) => {
+    console.info("[API response]", {
+      method: String(response.config?.method || "get").toUpperCase(),
+      url: buildUrl(response.config),
+      status: response.status,
+      data: response.data,
+    });
+
+    return response;
+  },
+  (error) => {
+    console.error("[API error]", {
+      method: String(error.config?.method || "get").toUpperCase(),
+      url: buildUrl(error.config),
+      status: error.response?.status,
+      message: error.message,
+      data: error.response?.data,
+    });
+
+    return Promise.reject(error);
+  },
+);
+
+// So'rov ishlamasa local fallbackni saqlash uchun umumiy helper ishlatiladi.
+async function tryRequests(requests = []) {
+  for (const request of requests) {
+    try {
+      return await request();
+    } catch {
+      // Keyingi variantni sinab ko'ramiz.
+    }
+  }
+
+  throw new Error("All API requests failed");
 }
 
 function readJson(key, fallback) {
@@ -238,23 +317,17 @@ export async function updateProductApi(id, payload) {
   writeDeletedIds(deletedIds);
 
   try {
-    const response = await api.put(`/products/${id}`, prepared);
+    const response = await tryRequests([
+      () => api.put(`/products/${id}`, prepared),
+      () => api.patch(`/products/${id}`, prepared),
+    ]);
     const serverUpdated = normalizeProduct(
       response.data?.product || response.data || { ...prepared, id },
     );
     upsertLocalProduct(id, serverUpdated);
     return serverUpdated;
   } catch {
-    try {
-      const response = await api.patch(`/products/${id}`, prepared);
-      const serverUpdated = normalizeProduct(
-        response.data?.product || response.data || { ...prepared, id },
-      );
-      upsertLocalProduct(id, serverUpdated);
-      return serverUpdated;
-    } catch {
-      return upsertLocalProduct(id, prepared);
-    }
+    return upsertLocalProduct(id, prepared);
   }
 }
 
@@ -269,20 +342,15 @@ export async function deleteProductApi(id) {
   emitProductsChanged();
 
   try {
-    await api.delete(`/products/${id}`);
+    await tryRequests([
+      () => api.delete(`/products/${id}`),
+      () => api.post(`/products/${id}/delete`, {}),
+      () => api.patch(`/products/${id}`, { isDeleted: true, status: "deleted" }),
+    ]);
     return true;
   } catch {
-    try {
-      await api.post(`/products/${id}/delete`, {});
-      return true;
-    } catch {
-      try {
-        await api.patch(`/products/${id}`, { isDeleted: true, status: "deleted" });
-      } catch {
-        // Offline/fail holatda local rejim davom etadi.
-      }
-      return true;
-    }
+    // Offline/fail holatda local rejim davom etadi.
+    return true;
   }
 }
 

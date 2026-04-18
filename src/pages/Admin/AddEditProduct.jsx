@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   createProductApi,
   fetchProductApi,
   updateProductApi,
   uploadImageApi,
 } from "../../services/api";
+import { showError, showSuccess } from "../../services/toast";
 
 const INITIAL_FORM = {
   title: "",
@@ -24,6 +27,39 @@ const INITIAL_FORM = {
   thumbnail: "",
   images: [],
 };
+
+const productSchema = Yup.object({
+  title: Yup.string().trim().required("Title is required."),
+  description: Yup.string().trim().required("Description is required."),
+  price: Yup.number()
+    .typeError("Price must be a number.")
+    .min(0, "Price cannot be negative.")
+    .required("Price is required."),
+  discountPercentage: Yup.number()
+    .transform((value, originalValue) => (originalValue === "" ? 0 : value))
+    .typeError("Discount must be a number.")
+    .min(0, "Discount cannot be less than 0.")
+    .max(100, "Discount cannot be greater than 100."),
+  type: Yup.string().trim().required("Type is required."),
+  dressStyle: Yup.string().trim().required("Dress style is required."),
+  size: Yup.string().trim().required("Size is required."),
+  rank: Yup.number()
+    .transform((value, originalValue) => (originalValue === "" ? 0 : value))
+    .typeError("Rank must be a number.")
+    .min(0, "Rank cannot be negative."),
+  rating: Yup.number()
+    .transform((value, originalValue) => (originalValue === "" ? 0 : value))
+    .typeError("Rating must be a number.")
+    .min(0, "Rating cannot be less than 0.")
+    .max(5, "Rating cannot be greater than 5."),
+  stock: Yup.number()
+    .transform((value, originalValue) => (originalValue === "" ? 0 : value))
+    .typeError("Stock must be a number.")
+    .min(0, "Stock cannot be negative."),
+  brand: Yup.string().trim().required("Brand is required."),
+  category: Yup.string().trim().required("Category is required."),
+  thumbnail: Yup.string().url("Image URL is invalid.").nullable(),
+});
 
 function toEditForm(product) {
   const gallery = (product.images || product.pictures || []).filter(Boolean);
@@ -52,6 +88,7 @@ function buildPayload(form) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+
   return {
     title: form.title,
     name: form.title,
@@ -59,7 +96,7 @@ function buildPayload(form) {
     price: form.price,
     discountPercentage: form.discountPercentage,
     type: form.type,
-    category: form.type,
+    category: form.category,
     dressStyle: form.dressStyle,
     size: form.size,
     colors,
@@ -73,284 +110,474 @@ function buildPayload(form) {
   };
 }
 
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-black/60">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function FieldError({ message }) {
+  if (!message) return null;
+
+  return <p className="mt-2 text-sm text-red-600">{message}</p>;
+}
+
 function AddEditProduct() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
 
-  const [form, setForm] = useState(INITIAL_FORM);
+  const [initialForm, setInitialForm] = useState(INITIAL_FORM);
   const [loading, setLoading] = useState(false);
+  const [loadingProduct, setLoadingProduct] = useState(false);
   const [uploadingMain, setUploadingMain] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [error, setError] = useState("");
 
-  // Edit bo'lsa mavjud ma'lumotni formga yuklaymiz
   useEffect(() => {
     const loadProduct = async () => {
       if (!isEdit) return;
+
       try {
+        setLoadingProduct(true);
         const product = await fetchProductApi(id, { fromServer: true });
         if (!product) return;
-        setForm(toEditForm(product));
+        setInitialForm(toEditForm(product));
       } catch (err) {
-        setError(err.response?.data?.message || "Failed to load product");
+        const message = err.response?.data?.message || "Failed to load product";
+        setError(message);
+        showError(message, "Product load failed");
+      } finally {
+        setLoadingProduct(false);
       }
     };
+
     loadProduct();
   }, [id, isEdit]);
 
-  const updateField = (name, value) => {
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
+  const formik = useFormik({
+    initialValues: initialForm,
+    enableReinitialize: true,
+    validationSchema: productSchema,
+    validateOnMount: true,
+    onSubmit: async (values) => {
+      setLoading(true);
+      setError("");
 
-  // Asosiy rasm upload
+      try {
+        const payload = buildPayload(values);
+        if (isEdit) await updateProductApi(id, payload);
+        else await createProductApi(payload);
+        showSuccess(isEdit ? "Product updated." : "Product created.");
+        navigate("/admin");
+      } catch (err) {
+        const message = err.response?.data?.message || "Save failed";
+        setError(message);
+        showError(message, "Save failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+  });
+
+  const hasFieldError = (name) =>
+    formik.touched[name] && formik.errors[name] ? formik.errors[name] : "";
+
   const handleMainImageUpload = async (file) => {
     if (!file) return;
+
     setError("");
     setUploadingMain(true);
     try {
       const url = await uploadImageApi(file);
-      updateField("thumbnail", url);
+      // Uploaded image is saved directly so preview stays in sync with the form.
+      formik.setFieldValue("thumbnail", url, true);
+      showSuccess("Main image uploaded.");
     } catch {
       setError("Main image upload failed");
+      showError("Main image upload failed");
     } finally {
       setUploadingMain(false);
     }
   };
 
-  // Gallery rasmlar upload (multiple)
   const handleGalleryUpload = async (files) => {
     if (!files?.length) return;
+
     setError("");
     setUploadingGallery(true);
-
     try {
       const urls = [];
       for (const file of files) {
         urls.push(await uploadImageApi(file));
       }
-      setForm((prev) => ({ ...prev, images: [...prev.images, ...urls] }));
+      formik.setFieldValue("images", [...formik.values.images, ...urls], false);
+      showSuccess("Gallery updated.");
     } catch {
       setError("Gallery upload failed");
+      showError("Gallery upload failed");
     } finally {
       setUploadingGallery(false);
     }
   };
 
   const removeGalleryImage = (index) => {
-    setForm((prev) => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    try {
-      const payload = buildPayload(form);
-      if (isEdit) await updateProductApi(id, payload);
-      else await createProductApi(payload);
-      navigate("/admin");
-    } catch (err) {
-      setError(err.response?.data?.message || "Save failed");
-    } finally {
-      setLoading(false);
-    }
+    formik.setFieldValue(
+      "images",
+      formik.values.images.filter((_, imageIndex) => imageIndex !== index),
+      false,
+    );
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold mb-6">
-        {isEdit ? "Edit Product" : "Add Product"}
-      </h1>
-      {error && <p className="mb-4 text-red-600">{error}</p>}
-
-      <form onSubmit={handleSubmit} className="space-y-4 border rounded p-4">
-        <input
-          name="title"
-          value={form.title}
-          onChange={(e) => updateField("title", e.target.value)}
-          placeholder="Title"
-          className="w-full border p-2 rounded"
-          required
-        />
-        <textarea
-          name="description"
-          value={form.description}
-          onChange={(e) => updateField("description", e.target.value)}
-          placeholder="Description"
-          className="w-full border p-2 rounded"
-        />
-
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            type="number"
-            value={form.price}
-            onChange={(e) => updateField("price", e.target.value)}
-            placeholder="Price"
-            className="w-full border p-2 rounded"
-            required
-          />
-          <input
-            type="number"
-            value={form.discountPercentage}
-            onChange={(e) => updateField("discountPercentage", e.target.value)}
-            placeholder="Discount %"
-            className="w-full border p-2 rounded"
-          />
+    <div className="min-h-screen bg-[#f8f8f8]">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
+        <div className="text-sm text-black/60">
+          <Link to="/admin" className="transition hover:text-black">
+            Admin
+          </Link>{" "}
+          &gt;{" "}
+          <span className="text-black">
+            {isEdit ? "Edit Product" : "Add Product"}
+          </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            type="number"
-            step="0.1"
-            value={form.rating}
-            onChange={(e) => updateField("rating", e.target.value)}
-            placeholder="Rating"
-            className="w-full border p-2 rounded"
-          />
-          <input
-            type="number"
-            value={form.stock}
-            onChange={(e) => updateField("stock", e.target.value)}
-            placeholder="Stock"
-            className="w-full border p-2 rounded"
-          />
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.25em] text-black/40">
+              Product Editor
+            </p>
+            <h1 className="mt-2 text-4xl font-black text-black">
+              {isEdit ? "Edit Product" : "Add Product"}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-black/60">
+              Manage product details, images, and storefront presentation in a
+              cleaner responsive form.
+            </p>
+          </div>
+          <Link
+            to="/admin"
+            className="inline-flex h-11 items-center rounded-full border border-black/10 bg-white px-5 text-sm font-medium text-black transition hover:border-black"
+          >
+            Back to Dashboard
+          </Link>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            value={form.type}
-            onChange={(e) => updateField("type", e.target.value)}
-            placeholder="Type (T-shirts, Jeans...)"
-            className="w-full border p-2 rounded"
-          />
-          <input
-            value={form.dressStyle}
-            onChange={(e) => updateField("dressStyle", e.target.value)}
-            placeholder="Dress Style (Casual, Formal...)"
-            className="w-full border p-2 rounded"
-          />
-        </div>
+        {error ? (
+          <div className="mb-5 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
 
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            value={form.size}
-            onChange={(e) => updateField("size", e.target.value)}
-            placeholder="Size (Small, Medium...)"
-            className="w-full border p-2 rounded"
-          />
-          <input
-            type="number"
-            value={form.rank}
-            onChange={(e) => updateField("rank", e.target.value)}
-            placeholder="Rank"
-            className="w-full border p-2 rounded"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-3">
-          <input
-            value={form.colorsText}
-            onChange={(e) => updateField("colorsText", e.target.value)}
-            placeholder="Colors (comma): 00C12B, F50606"
-            className="w-full border p-2 rounded"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            value={form.brand}
-            onChange={(e) => updateField("brand", e.target.value)}
-            placeholder="Brand"
-            className="w-full border p-2 rounded"
-          />
-          <input
-            value={form.category}
-            onChange={(e) => updateField("category", e.target.value)}
-            placeholder="Category (optional)"
-            className="w-full border p-2 rounded"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold">
-            Main Image (asosiy rasm)
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => handleMainImageUpload(e.target.files?.[0])}
-            className="w-full border p-2 rounded"
-          />
-          {uploadingMain && (
-            <p className="text-sm text-blue-600">Uploading main image...</p>
-          )}
-          {form.thumbnail && (
-            <img
-              src={form.thumbnail}
-              alt="main preview"
-              className="w-28 h-28 object-cover rounded border"
-            />
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold">
-            Gallery Images (galereya)
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => handleGalleryUpload(e.target.files)}
-            className="w-full border p-2 rounded"
-          />
-          {uploadingGallery && (
-            <p className="text-sm text-blue-600">Uploading gallery...</p>
-          )}
-
-          {form.images.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 pt-1">
-              {form.images.map((img, idx) => (
-                <div key={`${img}-${idx}`} className="relative">
-                  <img
-                    src={img}
-                    alt={`gallery-${idx}`}
-                    className="w-full h-20 object-cover rounded border"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeGalleryImage(idx)}
-                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-600 text-white text-xs"
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
+        <form
+          onSubmit={formik.handleSubmit}
+          className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]"
+        >
+          <div className="card-surface p-5 sm:p-6">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-black">
+                  Product Information
+                </h2>
+                <p className="text-sm text-black/50">
+                  Basic storefront content and product metadata.
+                </p>
+              </div>
+              {loadingProduct ? (
+                <span className="rounded-full bg-[#f0f0f0] px-3 py-1 text-sm text-black/50">
+                  Loading...
+                </span>
+              ) : null}
             </div>
-          )}
-        </div>
 
-        <div className="flex gap-2">
-          <button
-            disabled={loading || uploadingMain || uploadingGallery}
-            className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
-          >
-            {loading ? "Saving..." : "Save"}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/admin")}
-            className="px-4 py-2 bg-gray-200 rounded"
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Field label="Title">
+                  <input
+                    name="title"
+                    value={formik.values.title}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    placeholder="Premium oversized t-shirt"
+                    className={`admin-input ${hasFieldError("title") ? "border-red-300" : ""}`}
+                  />
+                  <FieldError message={hasFieldError("title")} />
+                </Field>
+              </div>
+
+              <div className="sm:col-span-2">
+                <Field label="Description">
+                  <textarea
+                    name="description"
+                    value={formik.values.description}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    placeholder="Short product description"
+                    className={`admin-textarea ${hasFieldError("description") ? "border-red-300" : ""}`}
+                  />
+                  <FieldError message={hasFieldError("description")} />
+                </Field>
+              </div>
+
+              <Field label="Price">
+                <input
+                  name="price"
+                  type="number"
+                  value={formik.values.price}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="120"
+                  className={`admin-input ${hasFieldError("price") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("price")} />
+              </Field>
+              <Field label="Discount %">
+                <input
+                  name="discountPercentage"
+                  type="number"
+                  value={formik.values.discountPercentage}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="15"
+                  className={`admin-input ${hasFieldError("discountPercentage") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("discountPercentage")} />
+              </Field>
+
+              <Field label="Rating">
+                <input
+                  name="rating"
+                  type="number"
+                  step="0.1"
+                  value={formik.values.rating}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="4.8"
+                  className={`admin-input ${hasFieldError("rating") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("rating")} />
+              </Field>
+              <Field label="Stock">
+                <input
+                  name="stock"
+                  type="number"
+                  value={formik.values.stock}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="18"
+                  className={`admin-input ${hasFieldError("stock") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("stock")} />
+              </Field>
+
+              <Field label="Type">
+                <input
+                  name="type"
+                  value={formik.values.type}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="T-shirts"
+                  className={`admin-input ${hasFieldError("type") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("type")} />
+              </Field>
+              <Field label="Dress Style">
+                <input
+                  name="dressStyle"
+                  value={formik.values.dressStyle}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="Casual"
+                  className={`admin-input ${hasFieldError("dressStyle") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("dressStyle")} />
+              </Field>
+
+              <Field label="Size">
+                <input
+                  name="size"
+                  value={formik.values.size}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="Medium"
+                  className={`admin-input ${hasFieldError("size") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("size")} />
+              </Field>
+              <Field label="Rank">
+                <input
+                  name="rank"
+                  type="number"
+                  value={formik.values.rank}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="10"
+                  className={`admin-input ${hasFieldError("rank") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("rank")} />
+              </Field>
+
+              <Field label="Brand">
+                <input
+                  name="brand"
+                  value={formik.values.brand}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="Shop.co"
+                  className={`admin-input ${hasFieldError("brand") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("brand")} />
+              </Field>
+              <Field label="Category">
+                <input
+                  name="category"
+                  value={formik.values.category}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  placeholder="T-shirts"
+                  className={`admin-input ${hasFieldError("category") ? "border-red-300" : ""}`}
+                />
+                <FieldError message={hasFieldError("category")} />
+              </Field>
+
+              <div className="sm:col-span-2">
+                <Field label="Colors">
+                  <input
+                    name="colorsText"
+                    value={formik.values.colorsText}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    placeholder="00C12B, F50606, 000000"
+                    className="admin-input"
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="card-surface p-5 sm:p-6">
+              <h2 className="text-2xl font-bold text-black">Main Image</h2>
+              <p className="mt-2 text-sm text-black/50">
+                Upload the primary storefront image.
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) =>
+                    handleMainImageUpload(event.target.files?.[0])
+                  }
+                  className="admin-input h-auto py-3"
+                />
+                {uploadingMain ? (
+                  <p className="text-sm text-black/50">
+                    Uploading main image...
+                  </p>
+                ) : null}
+                <div className="flex min-h-[220px] items-center justify-center rounded-[24px] bg-[#f2f0f1] p-4">
+                  {formik.values.thumbnail ? (
+                    <img
+                      src={formik.values.thumbnail}
+                      alt="main preview"
+                      className="max-h-[220px] w-full object-contain"
+                    />
+                  ) : (
+                    <p className="text-sm text-black/40">
+                      No main image selected
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="card-surface p-5 sm:p-6">
+              <h2 className="text-2xl font-bold text-black">Gallery</h2>
+              <p className="mt-2 text-sm text-black/50">
+                Add extra product shots for the detail page gallery.
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) => handleGalleryUpload(event.target.files)}
+                  className="admin-input h-auto py-3"
+                />
+                {uploadingGallery ? (
+                  <p className="text-sm text-black/50">
+                    Uploading gallery images...
+                  </p>
+                ) : null}
+
+                {formik.values.images.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {formik.values.images.map((image, index) => (
+                      <div
+                        key={`${image}-${index}`}
+                        className="relative overflow-hidden rounded-[20px] bg-[#f2f0f1] p-2"
+                      >
+                        <img
+                          src={image}
+                          alt={`gallery-${index}`}
+                          className="h-28 w-full rounded-2xl object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeGalleryImage(index)}
+                          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-black text-xs text-white transition hover:bg-red-600"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[20px] border border-dashed border-black/10 px-4 py-6 text-center text-sm text-black/40">
+                    No gallery images yet
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="card-surface p-5 sm:p-6">
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="submit"
+                  disabled={
+                    loading ||
+                    uploadingMain ||
+                    uploadingGallery ||
+                    !formik.isValid ||
+                    !formik.dirty
+                  }
+                  className="inline-flex h-12 flex-1 items-center justify-center rounded-full bg-black px-5 text-sm font-medium text-white transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading
+                    ? "Saving..."
+                    : isEdit
+                      ? "Save Changes"
+                      : "Create Product"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/admin")}
+                  className="inline-flex h-12 items-center justify-center rounded-full border border-black/10 bg-white px-5 text-sm font-medium text-black transition hover:border-black"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

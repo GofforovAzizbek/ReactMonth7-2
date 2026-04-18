@@ -1,97 +1,133 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { fetchProductsApi, PRODUCTS_CHANGED_EVENT } from "../../services/api";
+import ProductCard, { ProductGridSkeleton } from "../ProductCard";
+import { ErrorState } from "../StatusState";
+import { showError } from "../../services/toast";
+import casualImage from "../../assets/images/casual.png";
+import formalImage from "../../assets/images/formal.png";
+import partyImage from "../../assets/images/party.png";
+import gymImage from "../../assets/images/gym.png";
 
-function buildStars(rating) {
-  const full = Math.max(0, Math.min(5, Math.round(rating)));
-  return "★".repeat(full) + "☆".repeat(5 - full);
-}
-
-// Bitta mahsulot kartasi
-function ProductCard({ item, onOpen }) {
-  const price = Number(item.price || 0);
-  const discount = Number(item.discount || item.discountPercentage || 0);
-  const finalPrice = price - (price * discount) / 100;
-  const rating = Number(item.rating || 4.5);
-
+function SectionTitle({ title, description }) {
   return (
-    <button onClick={onOpen} className="text-left group">
-      <div className="bg-[#f1efef] rounded-[20px] p-5 h-[220px] sm:h-[240px] flex items-center justify-center mb-4 overflow-hidden">
-        <img
-          src={item.thumbnail || item.pictures?.[0]}
-          alt={item.name}
-          className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-200"
-        />
-      </div>
-
-      <p className="font-semibold text-base sm:text-lg line-clamp-1 mb-1">
-        {item.name || item.title}
-      </p>
-
-      <div className="flex items-center gap-2 text-sm mb-1">
-        <span className="text-[#f5b301]">{buildStars(rating)}</span>
-        <span className="text-gray-500">{rating.toFixed(1)}/5</span>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-bold text-xl">${finalPrice.toFixed(0)}</span>
-        {discount > 0 && (
-          <>
-            <span className="text-gray-400 line-through text-xl">
-              ${price.toFixed(0)}
-            </span>
-            <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded-full">
-              -{discount}%
-            </span>
-          </>
-        )}
-      </div>
-    </button>
+    <div className="mb-8 flex flex-col items-center text-center sm:mb-10">
+      <h2 className="text-[32px] font-black uppercase text-black sm:text-5xl">
+        {title}
+      </h2>
+      {description ? (
+        <p className="mt-3 max-w-[640px] text-sm text-black/60 sm:text-base">
+          {description}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
-// Bir xil section UI (NEW ARRIVALS / TOP SELLING)
-function ProductSection({ title, items, onOpen }) {
+function ProductSection({ title, description, items }) {
   return (
-    <>
-      <h2 className="text-center font-black text-4xl sm:text-5xl mb-8 sm:mb-10">
-        {title}
-      </h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+    <section>
+      <SectionTitle title={title} description={description} />
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {items.map((item) => (
-          <ProductCard
-            key={item.id}
-            item={item}
-            onOpen={() => onOpen(item.id)}
-          />
+          <ProductCard key={item.id} item={item} />
         ))}
       </div>
-      <div className="flex justify-center mt-8 sm:mt-10">
+      <div className="mt-9 flex justify-center">
         <Link
           to="/shop/casual"
-          className="inline-flex items-center h-12 px-10 rounded-full border border-gray-300 hover:bg-gray-100 transition-colors"
+          className="inline-flex h-12 items-center rounded-full border border-black/10 px-12 text-sm font-medium text-black transition hover:border-black hover:bg-black hover:text-white"
         >
           View All
         </Link>
       </div>
-    </>
+    </section>
+  );
+}
+
+function DressStyleCard({ title, image }) {
+  return (
+    <Link
+      to={`/shop/${title.toLowerCase()}`}
+      className="group overflow-hidden rounded-[30px] bg-white shadow-sm transition duration-300 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)]"
+    >
+      <div className="grid h-[220px] sm:h-[240px] grid-cols-[1.1fr_1.9fr] overflow-hidden rounded-[30px]">
+        <div className="flex items-start p-6">
+          <h3 className="text-2xl font-bold text-black leading-tight">
+            {title}
+          </h3>
+        </div>
+        <div className="relative overflow-hidden">
+          <img
+            src={image}
+            alt={title}
+            className="h-full w-full object-cover object-right"
+          />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function Testimonials() {
+  const items = [
+    {
+      name: "Sarah M.",
+      quote:
+        "I found pieces that look premium and actually feel comfortable all day. The quality surprised me.",
+    },
+    {
+      name: "Alex K.",
+      quote:
+        "The product pages are clear, shipping was smooth, and the clothes matched the photos really well.",
+    },
+    {
+      name: "James L.",
+      quote:
+        "Easy shopping experience and the styling feels modern without trying too hard. I’d absolutely come back.",
+    },
+  ];
+
+  return (
+    <section className="py-12 sm:py-16">
+      <div className="mb-8 flex items-end justify-between gap-4">
+        <h2 className="text-[32px] font-black uppercase text-black sm:text-5xl">
+          Our Happy Customers
+        </h2>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {items.map((item) => (
+          <article
+            key={item.name}
+            className="rounded-[20px] border border-black/10 bg-white p-6 transition hover:border-black/20 hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)]"
+          >
+            <p className="mb-4 text-[#f5b301]">★★★★★</p>
+            <h3 className="mb-3 text-xl font-bold text-black">{item.name}</h3>
+            <p className="text-sm leading-6 text-black/60">{item.quote}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
 function Cart() {
-  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Mahsulotlarni backend/local cache'dan olish
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
       setProducts(await fetchProductsApi({ fromServer: true }));
       setError("");
     } catch (err) {
-      setError(err.response?.data?.message || "Mahsulotlarni yuklab bo'lmadi");
+      const message =
+        err.response?.data?.message ||
+        "We couldn't load the latest products. Please verify the API base URL.";
+      setError(message);
+      showError(message, "Storefront load failed");
     } finally {
       setLoading(false);
     }
@@ -103,37 +139,91 @@ function Cart() {
     const onRefresh = () => fetchProducts();
     window.addEventListener("focus", onRefresh);
     window.addEventListener(PRODUCTS_CHANGED_EVENT, onRefresh);
+
     return () => {
       window.removeEventListener("focus", onRefresh);
       window.removeEventListener(PRODUCTS_CHANGED_EVENT, onRefresh);
     };
   }, [fetchProducts]);
 
-  const sections = useMemo(
-    () => [
-      { title: "NEW ARRIVALS", items: products.slice(0, 4) },
-      { title: "TOP SELLING", items: products.slice(4, 8) },
-    ],
-    [products],
-  );
+  const sections = useMemo(() => {
+    const ranked = [...products].sort(
+      (left, right) => Number(right.rank || 0) - Number(left.rank || 0),
+    );
+    const discounted = [...products]
+      .filter(
+        (item) => Number(item.discount || item.discountPercentage || 0) > 0,
+      )
+      .sort(
+        (left, right) =>
+          Number(right.discount || right.discountPercentage || 0) -
+          Number(left.discount || left.discountPercentage || 0),
+      );
 
-  if (loading) return <p className="p-8 text-center">Loading...</p>;
-  if (error) return <p className="p-8 text-center text-red-600">{error}</p>;
+    return {
+      arrivals: products.slice(0, 4),
+      topSelling: (discounted.length > 0 ? discounted : ranked).slice(0, 4),
+    };
+  }, [products]);
+
+  const dressStyles = [
+    { title: "Casual", image: casualImage },
+    { title: "Formal", image: formalImage },
+    { title: "Party", image: partyImage },
+    { title: "Gym", image: gymImage },
+  ];
 
   return (
-    <section className="container py-12 sm:py-16">
-      <ProductSection
-        title={sections[0].title}
-        items={sections[0].items}
-        onOpen={(id) => navigate(`/product/${id}`)}
-      />
-      <div className="my-10 sm:my-14 border-t border-gray-200" />
-      <ProductSection
-        title={sections[1].title}
-        items={sections[1].items}
-        onOpen={(id) => navigate(`/product/${id}`)}
-      />
-    </section>
+    <div className="container py-12 sm:py-16">
+      {loading ? (
+        <>
+          <SectionTitle
+            title="New Arrivals"
+            description="Fresh drops inspired by the visual direction in the design."
+          />
+          <ProductGridSkeleton count={4} />
+          <div className="my-12 border-t border-black/10 sm:my-16" />
+          <SectionTitle
+            title="Top Selling"
+            description="Popular pieces with the strongest ranking and discounts."
+          />
+          <ProductGridSkeleton count={4} />
+        </>
+      ) : error ? (
+        <ErrorState message={error} onRetry={fetchProducts} />
+      ) : (
+        <>
+          <ProductSection
+            title="New Arrivals"
+            description="Fresh pieces with clean silhouettes, soft neutrals, and polished everyday styling."
+            items={sections.arrivals}
+          />
+
+          <div className="my-12 border-t border-black/10 sm:my-16" />
+
+          <ProductSection
+            title="Top Selling"
+            description="Best-performing products pulled from the live catalog with real pricing and discount data."
+            items={sections.topSelling}
+          />
+
+          <section className="mt-12 rounded-[40px] bg-[#f2f2f2] px-6 py-8 sm:mt-20 sm:px-12 sm:py-14 lg:px-16">
+            <SectionTitle title="Browse By Dress Style" />
+            <div className="grid gap-4 sm:grid-cols-2">
+              {dressStyles.map((item) => (
+                <DressStyleCard
+                  key={item.title}
+                  title={item.title}
+                  image={item.image}
+                />
+              ))}
+            </div>
+          </section>
+
+          <Testimonials />
+        </>
+      )}
+    </div>
   );
 }
 

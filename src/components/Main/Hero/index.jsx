@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 // Brands
 import Brands from "./Brands";
 
@@ -13,11 +14,11 @@ function Hero() {
 
   return (
     <>
-      <section className="relative w-full max-w-[1440px] mx-auto bg-[#F2F0F1]">
+      <section className="relative mx-auto w-full max-w-[1440px] overflow-hidden bg-[#F2F0F1]">
         <div className="flex flex-col items-center md:block">
           {/* Hero Description */}
           <div className="container md:absolute md:inset-0">
-            <div className="max-w-[595px] w-full flex flex-col items-start gap-[24px] xl:gap-[32px] pt-[100px] pb-[120px]">
+            <div className="max-w-[595px] w-full flex animate-page-in flex-col items-start gap-[24px] pt-[64px] pb-[40px] xl:gap-[32px] md:pt-[100px] md:pb-[120px]">
               <h1
                 className="font-bold 
               text-[36px] leading-[36px] 
@@ -38,15 +39,16 @@ function Hero() {
                 your sense of style.
               </p>
 
-              <button
+              <Link
+                to="/shop/casual"
                 className="bg-black text-white font-medium 
               text-[14px] md:text-base px-[67px] py-[15px] 
-              rounded-full hover:bg-black/80 transition-all mb-[16px] w-full md:w-auto"
+              rounded-full hover:bg-black/80 transition-all mb-[16px] w-full md:w-auto text-center"
               >
                 Shop Now
-              </button>
+              </Link>
 
-              <div className="flex flex-wrap justify-center mx-auto md:flex-nowrap">
+              <div className="flex flex-wrap justify-center md:justify-start mx-auto md:mx-0 md:flex-nowrap">
                 {stats.map((stat, index) => (
                   <div
                     key={index}
@@ -83,12 +85,12 @@ function Hero() {
             <img
               src={HeroBannerMobile}
               alt="Hero Mobile"
-              className="w-full block md:hidden"
+              className="block w-full md:hidden"
             />
             <img
               src={HeroBanner}
               alt="Hero Banner"
-              className="w-full hidden md:block"
+              className="hidden w-full md:block"
             />
           </div>
         </div>

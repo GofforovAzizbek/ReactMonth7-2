@@ -5,6 +5,8 @@ import {
   fetchProductsApi,
   PRODUCTS_CHANGED_EVENT,
 } from "../../services/api";
+import { EmptyState, ErrorState } from "../../components/StatusState";
+import { showError, showSuccess } from "../../services/toast";
 
 const STORAGE_KEYS = {
   reviews: "admin_reviews_v1",
@@ -40,15 +42,43 @@ function writeList(key, list) {
   localStorage.setItem(key, JSON.stringify(list));
 }
 
-// List ichida add/edit umumiy helper
 function upsertById(list, payload) {
-  const idx = list.findIndex((item) => String(item.id) === String(payload.id));
-  if (idx >= 0) {
+  const index = list.findIndex((item) => String(item.id) === String(payload.id));
+  if (index >= 0) {
     const next = [...list];
-    next[idx] = payload;
+    next[index] = payload;
     return next;
   }
   return [payload, ...list];
+}
+
+function formatStatus(status) {
+  const value = String(status || "pending");
+  return value[0].toUpperCase() + value.slice(1);
+}
+
+function TableAction({ children, className = "", ...props }) {
+  return (
+    <button
+      {...props}
+      className={`rounded-full px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-10">
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="card-surface h-32 animate-pulse bg-[#f5f5f5]" />
+        ))}
+      </div>
+      <div className="card-surface h-[420px] animate-pulse bg-[#f5f5f5]" />
+    </div>
+  );
 }
 
 function AdminDashboard() {
@@ -62,9 +92,8 @@ function AdminDashboard() {
   const [reviewForm, setReviewForm] = useState(EMPTY_REVIEW_FORM);
   const [orderForm, setOrderForm] = useState(EMPTY_ORDER_FORM);
 
-  // Select optionlarda product nomlarini bir xil ko'rinishda ishlatamiz
   const productOptions = useMemo(
-    () => products.map((p) => ({ id: p.id, name: p.name || p.title })),
+    () => products.map((item) => ({ id: item.id, name: item.name || item.title })),
     [products],
   );
 
@@ -74,7 +103,11 @@ function AdminDashboard() {
       setProducts(await fetchProductsApi({ fromServer: true }));
       setError("");
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to load products");
+      const message =
+        err.response?.data?.message ||
+        "Products could not be loaded for the dashboard.";
+      setError(message);
+      showError(message, "Admin data failed");
     } finally {
       setLoading(false);
     }
@@ -92,20 +125,23 @@ function AdminDashboard() {
   }, [fetchProducts]);
 
   const handleDeleteProduct = async (product) => {
-    const id = product.id;
     if (!window.confirm(`Delete ${product.name || product.title}?`)) return;
 
     try {
-      await deleteProductApi(id);
-      setProducts((prev) => prev.filter((p) => String(p.id) !== String(id)));
+      await deleteProductApi(product.id);
+      setProducts((current) =>
+        current.filter((item) => String(item.id) !== String(product.id)),
+      );
+      showSuccess("Product deleted successfully.");
     } catch (err) {
-      setError(err.response?.data?.message || "Delete failed");
+      const message = err.response?.data?.message || "Delete failed";
+      setError(message);
+      showError(message, "Delete failed");
     }
   };
 
-  // Review CRUD
-  const saveReview = (e) => {
-    e.preventDefault();
+  const saveReview = (event) => {
+    event.preventDefault();
     const payload = {
       id: reviewForm.id || String(Date.now()),
       productId: reviewForm.productId,
@@ -114,31 +150,23 @@ function AdminDashboard() {
       comment: reviewForm.comment.trim(),
       createdAt: new Date().toISOString(),
     };
+
     const next = upsertById(reviews, payload);
     writeList(STORAGE_KEYS.reviews, next);
     setReviews(next);
     setReviewForm(EMPTY_REVIEW_FORM);
-  };
-
-  const editReview = (item) => {
-    setReviewForm({
-      id: String(item.id),
-      productId: String(item.productId || ""),
-      customer: item.customer || "",
-      rating: String(item.rating || ""),
-      comment: item.comment || "",
-    });
+    showSuccess(reviewForm.id ? "Review updated." : "Review added.");
   };
 
   const deleteReview = (id) => {
-    const next = reviews.filter((r) => String(r.id) !== String(id));
+    const next = reviews.filter((item) => String(item.id) !== String(id));
     writeList(STORAGE_KEYS.reviews, next);
     setReviews(next);
+    showSuccess("Review deleted.");
   };
 
-  // Order CRUD
-  const saveOrder = (e) => {
-    e.preventDefault();
+  const saveOrder = (event) => {
+    event.preventDefault();
     const payload = {
       id: orderForm.id || String(Date.now()),
       productId: orderForm.productId,
@@ -147,327 +175,410 @@ function AdminDashboard() {
       status: orderForm.status,
       createdAt: new Date().toISOString(),
     };
+
     const next = upsertById(orders, payload);
     writeList(STORAGE_KEYS.orders, next);
     setOrders(next);
     setOrderForm(EMPTY_ORDER_FORM);
-  };
-
-  const editOrder = (item) => {
-    setOrderForm({
-      id: String(item.id),
-      productId: String(item.productId || ""),
-      customer: item.customer || "",
-      quantity: String(item.quantity || ""),
-      status: item.status || "pending",
-    });
+    showSuccess(orderForm.id ? "Order updated." : "Order added.");
   };
 
   const deleteOrder = (id) => {
-    const next = orders.filter((o) => String(o.id) !== String(id));
+    const next = orders.filter((item) => String(item.id) !== String(id));
     writeList(STORAGE_KEYS.orders, next);
     setOrders(next);
+    showSuccess("Order deleted.");
   };
 
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
     localStorage.removeItem("adminUser");
     document.cookie = "adminToken=; path=/; max-age=0";
+    showSuccess("Logged out successfully.");
     navigate("/login");
   };
 
-  if (loading) return <p className="p-8 text-center">Loading...</p>;
+  if (loading) return <DashboardSkeleton />;
+  if (error && products.length === 0) {
+    return <ErrorState className="mx-auto mt-10 max-w-7xl" message={error} onRetry={fetchProducts} />;
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-10">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Admin Panel</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={fetchProducts}
-            className="px-4 py-2 bg-blue-600 text-white rounded"
-          >
-            Refresh
-          </button>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 bg-red-600 text-white rounded"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
-
-      <div className="flex gap-2 mb-6">
-        {["products", "reviews", "orders"].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded ${
-              activeTab === tab ? "bg-black text-white" : "bg-gray-200"
-            }`}
-          >
-            {tab[0].toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      {error && <p className="mb-4 text-red-600">{error}</p>}
-
-      {activeTab === "products" && (
-        <div className="space-y-4">
-          <button
-            onClick={() => navigate("/admin/add")}
-            className="px-4 py-2 bg-green-600 text-white rounded"
-          >
-            Add Product
-          </button>
-
-          <div className="overflow-x-auto border rounded">
-            <table className="w-full">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="text-left p-3">Name</th>
-                  <th className="text-left p-3">Price</th>
-                  <th className="text-left p-3">Category</th>
-                  <th className="text-left p-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((p) => (
-                  <tr key={p.id} className="border-t">
-                    <td className="p-3">{p.name || p.title}</td>
-                    <td className="p-3">${Number(p.price || 0).toFixed(2)}</td>
-                    <td className="p-3">{p.type || p.category || "-"}</td>
-                    <td className="p-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => navigate(`/product/${p.id}`)}
-                          className="px-3 py-1 bg-gray-700 text-white rounded"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => navigate(`/admin/edit/${p.id}`)}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteProduct(p)}
-                          className="px-3 py-1 bg-red-600 text-white rounded"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <div className="min-h-screen bg-[#f8f8f8]">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-3">
+            {["products", "reviews", "orders"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`rounded-full px-5 py-3 text-sm font-medium transition ${
+                  activeTab === tab
+                    ? "bg-black text-white"
+                    : "bg-white text-black/60 hover:text-black"
+                }`}
+              >
+                {tab[0].toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
           </div>
-        </div>
-      )}
-
-      {activeTab === "reviews" && (
-        <div className="space-y-4">
-          <form onSubmit={saveReview} className="grid md:grid-cols-5 gap-2">
-            <select
-              className="border p-2 rounded"
-              value={reviewForm.productId}
-              onChange={(e) =>
-                setReviewForm((prev) => ({ ...prev, productId: e.target.value }))
-              }
-              required
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={fetchProducts}
+              className="rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-medium text-black transition hover:border-black"
             >
-              <option value="">Product</option>
-              {productOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <input
-              className="border p-2 rounded"
-              placeholder="Customer"
-              value={reviewForm.customer}
-              onChange={(e) =>
-                setReviewForm((prev) => ({ ...prev, customer: e.target.value }))
-              }
-              required
-            />
-            <input
-              className="border p-2 rounded"
-              placeholder="Rating"
-              type="number"
-              min={1}
-              max={5}
-              value={reviewForm.rating}
-              onChange={(e) =>
-                setReviewForm((prev) => ({ ...prev, rating: e.target.value }))
-              }
-              required
-            />
-            <input
-              className="border p-2 rounded"
-              placeholder="Comment"
-              value={reviewForm.comment}
-              onChange={(e) =>
-                setReviewForm((prev) => ({ ...prev, comment: e.target.value }))
-              }
-              required
-            />
-            <button className="bg-green-600 text-white rounded px-3 py-2">
-              {reviewForm.id ? "Update" : "Add"}
+              Refresh Data
             </button>
-          </form>
-
-          <div className="overflow-x-auto border rounded">
-            <table className="w-full">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="text-left p-3">Customer</th>
-                  <th className="text-left p-3">Product</th>
-                  <th className="text-left p-3">Rating</th>
-                  <th className="text-left p-3">Comment</th>
-                  <th className="text-left p-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reviews.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="p-3">{r.customer}</td>
-                    <td className="p-3">
-                      {productOptions.find(
-                        (p) => String(p.id) === String(r.productId),
-                      )?.name || r.productId}
-                    </td>
-                    <td className="p-3">{r.rating}</td>
-                    <td className="p-3">{r.comment}</td>
-                    <td className="p-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => editReview(r)}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => deleteReview(r.id)}
-                          className="px-3 py-1 bg-red-600 text-white rounded"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "orders" && (
-        <div className="space-y-4">
-          <form onSubmit={saveOrder} className="grid md:grid-cols-5 gap-2">
-            <select
-              className="border p-2 rounded"
-              value={orderForm.productId}
-              onChange={(e) =>
-                setOrderForm((prev) => ({ ...prev, productId: e.target.value }))
-              }
-              required
+            <button
+              onClick={handleLogout}
+              className="rounded-full bg-black px-5 py-3 text-sm font-medium text-white transition hover:bg-black/85"
             >
-              <option value="">Product</option>
-              {productOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <input
-              className="border p-2 rounded"
-              placeholder="Customer"
-              value={orderForm.customer}
-              onChange={(e) =>
-                setOrderForm((prev) => ({ ...prev, customer: e.target.value }))
-              }
-              required
-            />
-            <input
-              className="border p-2 rounded"
-              placeholder="Qty"
-              type="number"
-              min={1}
-              value={orderForm.quantity}
-              onChange={(e) =>
-                setOrderForm((prev) => ({ ...prev, quantity: e.target.value }))
-              }
-              required
-            />
-            <select
-              className="border p-2 rounded"
-              value={orderForm.status}
-              onChange={(e) =>
-                setOrderForm((prev) => ({ ...prev, status: e.target.value }))
-              }
-            >
-              <option value="pending">pending</option>
-              <option value="processing">processing</option>
-              <option value="completed">completed</option>
-              <option value="cancelled">cancelled</option>
-            </select>
-            <button className="bg-green-600 text-white rounded px-3 py-2">
-              {orderForm.id ? "Update" : "Add"}
+              Logout
             </button>
-          </form>
-
-          <div className="overflow-x-auto border rounded">
-            <table className="w-full">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="text-left p-3">Customer</th>
-                  <th className="text-left p-3">Product</th>
-                  <th className="text-left p-3">Qty</th>
-                  <th className="text-left p-3">Status</th>
-                  <th className="text-left p-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id} className="border-t">
-                    <td className="p-3">{o.customer}</td>
-                    <td className="p-3">
-                      {productOptions.find(
-                        (p) => String(p.id) === String(o.productId),
-                      )?.name || o.productId}
-                    </td>
-                    <td className="p-3">{o.quantity}</td>
-                    <td className="p-3">{o.status}</td>
-                    <td className="p-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => editOrder(o)}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => deleteOrder(o.id)}
-                          className="px-3 py-1 bg-red-600 text-white rounded"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
-      )}
+
+        {error ? (
+          <div className="mb-5 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        {activeTab === "products" ? (
+          <div className="card-surface overflow-hidden">
+            <div className="flex flex-col gap-4 border-b border-black/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div>
+                <h2 className="text-2xl font-bold text-black">Products</h2>
+                <p className="text-sm text-black/50">Browse, preview, edit, or remove existing catalog items.</p>
+              </div>
+              <button
+                onClick={() => navigate("/admin/add")}
+                className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-emerald-700"
+              >
+                Add Product
+              </button>
+            </div>
+
+            {products.length === 0 ? (
+              <div className="p-6">
+                <EmptyState
+                  title="No products found"
+                  description="The API returned an empty list. Try refreshing the dashboard."
+                  action={
+                    <button
+                      onClick={fetchProducts}
+                      className="inline-flex h-11 items-center rounded-full bg-black px-6 text-sm font-medium text-white"
+                    >
+                      Refresh
+                    </button>
+                  }
+                />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left">
+                  <thead className="bg-[#fafafa] text-sm text-black/50">
+                    <tr>
+                      <th className="px-6 py-4 font-medium">Product</th>
+                      <th className="px-6 py-4 font-medium">Price</th>
+                      <th className="px-6 py-4 font-medium">Category</th>
+                      <th className="px-6 py-4 font-medium">Stock</th>
+                      <th className="px-6 py-4 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((product) => (
+                      <tr key={product.id} className="border-t border-black/10">
+                        <td className="px-6 py-5">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={product.thumbnail || product.images?.[0] || product.pictures?.[0]}
+                              alt={product.name || product.title}
+                              className="h-14 w-14 rounded-2xl bg-[#f0f0f0] object-contain p-2"
+                            />
+                            <div>
+                              <p className="font-semibold text-black">{product.name || product.title}</p>
+                              <p className="text-sm text-black/50">{product.brand || "Shop.co"}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 font-medium text-black">${Number(product.price || 0).toFixed(2)}</td>
+                        <td className="px-6 py-5 text-black/70">{product.type || product.category || "-"}</td>
+                        <td className="px-6 py-5 text-black/70">{product.stock ?? 0}</td>
+                        <td className="px-6 py-5">
+                          <div className="flex flex-wrap gap-2">
+                            <TableAction onClick={() => navigate(`/product/${product.id}`)} className="bg-slate-700">
+                              View
+                            </TableAction>
+                            <TableAction onClick={() => navigate(`/admin/edit/${product.id}`)} className="bg-indigo-600">
+                              Edit
+                            </TableAction>
+                            <TableAction onClick={() => handleDeleteProduct(product)} className="bg-red-600">
+                              Delete
+                            </TableAction>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {activeTab === "reviews" ? (
+          <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+            <form onSubmit={saveReview} className="card-surface p-5 sm:p-6">
+              <h2 className="text-2xl font-bold text-black">
+                {reviewForm.id ? "Edit Review" : "Add Review"}
+              </h2>
+              <p className="mt-2 text-sm text-black/50">Reviews are stored locally and reflected on product pages.</p>
+
+              <div className="mt-5 space-y-4">
+                <select
+                  className="admin-input"
+                  value={reviewForm.productId}
+                  onChange={(event) =>
+                    setReviewForm((current) => ({ ...current, productId: event.target.value }))
+                  }
+                  required
+                >
+                  <option value="">Select product</option>
+                  {productOptions.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="admin-input"
+                  placeholder="Customer name"
+                  value={reviewForm.customer}
+                  onChange={(event) =>
+                    setReviewForm((current) => ({ ...current, customer: event.target.value }))
+                  }
+                  required
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Rating"
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={reviewForm.rating}
+                  onChange={(event) =>
+                    setReviewForm((current) => ({ ...current, rating: event.target.value }))
+                  }
+                  required
+                />
+                <textarea
+                  className="admin-textarea"
+                  placeholder="Comment"
+                  value={reviewForm.comment}
+                  onChange={(event) =>
+                    setReviewForm((current) => ({ ...current, comment: event.target.value }))
+                  }
+                  required
+                />
+                <button className="w-full rounded-full bg-black px-5 py-3 text-sm font-medium text-white transition hover:bg-black/85">
+                  {reviewForm.id ? "Update Review" : "Add Review"}
+                </button>
+              </div>
+            </form>
+
+            <div className="card-surface overflow-hidden">
+              <div className="border-b border-black/10 px-6 py-5">
+                <h2 className="text-2xl font-bold text-black">Review List</h2>
+              </div>
+              {reviews.length === 0 ? (
+                <div className="p-6">
+                  <EmptyState
+                    title="No reviews yet"
+                    description="Use the form to create the first customer review."
+                  />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left">
+                    <thead className="bg-[#fafafa] text-sm text-black/50">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Customer</th>
+                        <th className="px-6 py-4 font-medium">Product</th>
+                        <th className="px-6 py-4 font-medium">Rating</th>
+                        <th className="px-6 py-4 font-medium">Comment</th>
+                        <th className="px-6 py-4 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reviews.map((review) => (
+                        <tr key={review.id} className="border-t border-black/10">
+                          <td className="px-6 py-5 font-medium text-black">{review.customer}</td>
+                          <td className="px-6 py-5 text-black/70">
+                            {productOptions.find((item) => String(item.id) === String(review.productId))?.name || review.productId}
+                          </td>
+                          <td className="px-6 py-5 text-black/70">{review.rating}</td>
+                          <td className="px-6 py-5 text-black/70">{review.comment}</td>
+                          <td className="px-6 py-5">
+                            <div className="flex flex-wrap gap-2">
+                              <TableAction
+                                onClick={() =>
+                                  setReviewForm({
+                                    id: String(review.id),
+                                    productId: String(review.productId || ""),
+                                    customer: review.customer || "",
+                                    rating: String(review.rating || ""),
+                                    comment: review.comment || "",
+                                  })
+                                }
+                                className="bg-indigo-600"
+                              >
+                                Edit
+                              </TableAction>
+                              <TableAction onClick={() => deleteReview(review.id)} className="bg-red-600">
+                                Delete
+                              </TableAction>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === "orders" ? (
+          <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+            <form onSubmit={saveOrder} className="card-surface p-5 sm:p-6">
+              <h2 className="text-2xl font-bold text-black">
+                {orderForm.id ? "Edit Order" : "Add Order"}
+              </h2>
+              <p className="mt-2 text-sm text-black/50">Create clean mock orders for local admin workflows.</p>
+
+              <div className="mt-5 space-y-4">
+                <select
+                  className="admin-input"
+                  value={orderForm.productId}
+                  onChange={(event) =>
+                    setOrderForm((current) => ({ ...current, productId: event.target.value }))
+                  }
+                  required
+                >
+                  <option value="">Select product</option>
+                  {productOptions.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="admin-input"
+                  placeholder="Customer name"
+                  value={orderForm.customer}
+                  onChange={(event) =>
+                    setOrderForm((current) => ({ ...current, customer: event.target.value }))
+                  }
+                  required
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Quantity"
+                  type="number"
+                  min={1}
+                  value={orderForm.quantity}
+                  onChange={(event) =>
+                    setOrderForm((current) => ({ ...current, quantity: event.target.value }))
+                  }
+                  required
+                />
+                <select
+                  className="admin-input"
+                  value={orderForm.status}
+                  onChange={(event) =>
+                    setOrderForm((current) => ({ ...current, status: event.target.value }))
+                  }
+                >
+                  <option value="pending">Pending</option>
+                  <option value="processing">Processing</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <button className="w-full rounded-full bg-black px-5 py-3 text-sm font-medium text-white transition hover:bg-black/85">
+                  {orderForm.id ? "Update Order" : "Add Order"}
+                </button>
+              </div>
+            </form>
+
+            <div className="card-surface overflow-hidden">
+              <div className="border-b border-black/10 px-6 py-5">
+                <h2 className="text-2xl font-bold text-black">Order List</h2>
+              </div>
+              {orders.length === 0 ? (
+                <div className="p-6">
+                  <EmptyState
+                    title="No orders yet"
+                    description="Add a local order to simulate dashboard management."
+                  />
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left">
+                    <thead className="bg-[#fafafa] text-sm text-black/50">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Customer</th>
+                        <th className="px-6 py-4 font-medium">Product</th>
+                        <th className="px-6 py-4 font-medium">Qty</th>
+                        <th className="px-6 py-4 font-medium">Status</th>
+                        <th className="px-6 py-4 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders.map((order) => (
+                        <tr key={order.id} className="border-t border-black/10">
+                          <td className="px-6 py-5 font-medium text-black">{order.customer}</td>
+                          <td className="px-6 py-5 text-black/70">
+                            {productOptions.find((item) => String(item.id) === String(order.productId))?.name || order.productId}
+                          </td>
+                          <td className="px-6 py-5 text-black/70">{order.quantity}</td>
+                          <td className="px-6 py-5">
+                            <span className="rounded-full bg-[#f0f0f0] px-3 py-1 text-sm text-black/70">
+                              {formatStatus(order.status)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="flex flex-wrap gap-2">
+                              <TableAction
+                                onClick={() =>
+                                  setOrderForm({
+                                    id: String(order.id),
+                                    productId: String(order.productId || ""),
+                                    customer: order.customer || "",
+                                    quantity: String(order.quantity || ""),
+                                    status: order.status || "pending",
+                                  })
+                                }
+                                className="bg-indigo-600"
+                              >
+                                Edit
+                              </TableAction>
+                              <TableAction onClick={() => deleteOrder(order.id)} className="bg-red-600">
+                                Delete
+                              </TableAction>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

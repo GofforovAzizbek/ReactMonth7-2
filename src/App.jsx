@@ -10,6 +10,7 @@ import AdminDashboard from "./pages/Admin/Dashboard";
 import AddEditProduct from "./pages/Admin/AddEditProduct";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ToastViewport from "./components/ToastViewport";
 
 // Route bo'yicha umumiy layout qoidalari
 function AppContent() {
@@ -26,38 +27,41 @@ function AppContent() {
     <>
       {showHeader && <Header />}
       {showHero && <Main />}
-      <Routes>
-        <Route path="/" element={<Cart />} />
-        <Route path="/shop/:style" element={<ShopCasual />} />
-        <Route path="/cart" element={<CartPage />} />
-        <Route path="/product/:id" element={<ProductDetail />} />
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/add"
-          element={
-            <ProtectedRoute>
-              <AddEditProduct />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/edit/:id"
-          element={
-            <ProtectedRoute>
-              <AddEditProduct />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
+      <div key={path} className="animate-page-in">
+        <Routes>
+          <Route path="/" element={<Cart />} />
+          <Route path="/shop/:style" element={<ShopCasual />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/product/:id" element={<ProductDetail />} />
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/add"
+            element={
+              <ProtectedRoute>
+                <AddEditProduct />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/edit/:id"
+            element={
+              <ProtectedRoute>
+                <AddEditProduct />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </div>
       {showFooter && <Footer />}
+      <ToastViewport />
     </>
   );
 }

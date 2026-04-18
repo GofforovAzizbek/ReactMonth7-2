@@ -7,27 +7,25 @@ import calvin from "../../../../assets/icons/calvin.svg";
 
 function Brands() {
   return (
-    <>
-      <section className="max-w-[1440px] w-full mx-auto bg-black">
-        <div className="container flex-center flex-wrap justify-center py-[40px] gap-[32px] md:gap-[106px]">
-          <a href="#" className="">
-            <img src={versage} className="" />
-          </a>
-          <a href="#" className="">
-            <img src={zara} className="" />
-          </a>
-          <a href="#" className="">
-            <img src={gucci} className="" />
-          </a>
-          <a href="#" className="">
-            <img src={prada} className="" />
-          </a>
-          <a href="#" className="">
-            <img src={calvin} className="" />
-          </a>
-        </div>
-      </section>
-    </>
+    <section className="mx-auto w-full max-w-[1440px] bg-black">
+      <div className="container flex-center flex-wrap justify-center gap-[34px] py-[40px] md:gap-[90px]">
+        <a href="#" className="opacity-95 transition hover:opacity-100">
+          <img src={versage} alt="Versace" />
+        </a>
+        <a href="#" className="opacity-95 transition hover:opacity-100">
+          <img src={zara} alt="Zara" />
+        </a>
+        <a href="#" className="opacity-95 transition hover:opacity-100">
+          <img src={gucci} alt="Gucci" />
+        </a>
+        <a href="#" className="opacity-95 transition hover:opacity-100">
+          <img src={prada} alt="Prada" />
+        </a>
+        <a href="#" className="opacity-95 transition hover:opacity-100">
+          <img src={calvin} alt="Calvin Klein" />
+        </a>
+      </div>
+    </section>
   );
 }
 

@@ -2,10 +2,47 @@
 @import "flowbite";
 
 @layer {
+  @keyframes pageIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes toastIn {
+    from {
+      opacity: 0;
+      transform: translateY(-12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   .container {
     @apply max-w-[1272px] w-full px-[16px] mx-auto;
   }
   .flex-center {
     @apply flex items-center;
+  }
+  .animate-page-in {
+    animation: pageIn 0.35s ease-out;
+  }
+  .animate-toast-in {
+    animation: toastIn 0.25s ease-out;
+  }
+  .card-surface {
+    @apply rounded-[24px] border border-black/10 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.04)];
+  }
+  .admin-input {
+    @apply h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none transition focus:border-black;
+  }
+  .admin-textarea {
+    @apply min-h-[120px] w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-black;
   }
 }
